@@ -1,0 +1,28 @@
+<h2 class="content-subhead">Search</h2>
+
+<form action="/search" method="get">
+  <input name="query" value="<%= params[:query] %>">
+  <button type="submit">Search</button>
+</form>
+
+<% if params[:query] %>
+  <% if @search_results.any? %>
+    <h2 class="content-subhead">Results for '<%= params[:query] %>'</h2>
+    <ul>
+      <% ch_names = @search_results.map { |hsh| hsh[:name] }.uniq %>
+      <% ch_names.each do |ch_name| %>
+        <li><%= ch_name %><ul>
+          <% @search_results.each do |ch| %>
+            <% next unless ch[:name] == ch_name %>
+            <li>
+              <a href="/chapters/<%= ch[:number] %>">
+                <%= highlight(ch[:paragraph], params[:query]) %></a>
+            </li>
+          <% end %>
+        </ul></li>
+      <% end %>
+    </ul>
+  <% else %>
+    <p>Sorry, no matches were found.</p>
+  <% end %>
+<% end %>

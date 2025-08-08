@@ -1,0 +1,6 @@
+<h2>Users and Their Interests</h2>
+<ul>
+  <% @users.keys.each do |username| %>
+    <li><%= user_link(username) %></li>
+  <% end %>
+</ul>

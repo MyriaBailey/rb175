@@ -1,0 +1,30 @@
+<% @files = @files.sort_by do |file_path|
+  File.basename(file_path)
+end
+
+@files.reverse! unless @default_sort %>
+
+<html>
+  <body>
+    <h2>List of Files</h2>
+    <p>Default Sort: <%= @default_sort %></p>
+    <p>Files: <%= @files %></p>
+
+    <p><% if @default_sort %>
+      <a href="/?sort=descending">Sort Descending (Z-A)</a>
+      <% else %>
+      <a href="/?sort=ascending">Sort Ascending (A-Z)</a>
+      <% end %>
+    </p>
+
+    <ul>
+      <% @files.each do |file_path| %>
+        <li>
+          <a href=<%= "/#{file_path}" %>>
+            <%= File.basename(file_path) %>
+          </a>
+        </li>
+      <% end %>
+    </ul>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+<h2><%= @username %></h2>
+<p>Email Address: <%= @userdata[:email] %></p>
+<p>Interests: <%= @userdata[:interests].join(', ') %></p>
+
+<h3>Other Users</h3>
+<ul>
+  <% @users.keys.each do |username| %>
+    <% next if username == @username %>
+    <li><%= user_link(username) %></li>
+  <% end %>
+</ul>
