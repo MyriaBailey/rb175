@@ -108,4 +108,50 @@ class AppTest < Minitest::Test
     assert_equal 200, last_response.status
     assert_includes last_response.body, "New test content."
   end
+
+  def test_view_new_file_form
+    get '/new'
+    assert_equal 200, last_response.status
+    assert_equal "text/html;charset=utf-8", last_response["Content-Type"]
+
+    assert_includes last_response.body, "Add a new document:"
+    assert_includes last_response.body, %q(<input type="text")
+    assert_includes last_response.body, %q(<button type="submit")
+  end
+
+  def test_create_new_file
+    post '/new', filename: "new_file.txt"
+    assert_equal 302, last_response.status
+
+    get last_response["Location"]
+    assert_equal 200, last_response.status
+    assert_includes last_response.body, "new_file.txt was created."
+    assert_includes last_response.body, %q(<a href="/new_file.txt">)
+  end
+
+  def test_create_invalid_file
+    post '/new', filename: ""
+    assert_equal 422, last_response.status
+    assert_includes last_response.body, "Filename must not be empty."
+  end
+
+  def test_delete_btns
+    create_document("test.txt")
+    button = %q(<button type="submit">Delete</button>)
+
+    get '/'
+    assert_equal 200, last_response.status
+    assert_includes last_response.body, button
+  end
+
+  def test_delete_file
+    create_document("test.txt")
+
+    post '/test.txt/delete'
+    assert_equal 302, last_response.status
+
+    get last_response["Location"]
+    assert_includes last_response.body, "test.txt has been deleted."
+    refute_includes last_response.body, %q(<a href="/test.txt">)
+  end
 end

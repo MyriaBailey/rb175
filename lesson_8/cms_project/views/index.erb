@@ -1,10 +1,14 @@
 <p>Home Page</p>
+<p><a href="/new">New Document</a></p>
 
 <ul>
-  <% @files.each do |file| %>
+  <% @files.each do |filename| %>
     <li>
-      <a href="/<%= file %>"><%= file %></a> - 
-      <a href="/<%= file %>/edit">Edit</a>
+      <a href="/<%= filename %>"><%= filename %></a> - 
+      <a href="/<%= filename %>/edit">Edit</a>
+      <form class="inline" method="post" action="/<%= filename %>/delete">
+        <button type="submit">Delete</button>
+      </form>
     </li>
   <% end %>
 </ul>

@@ -1,6 +1,7 @@
 require 'sinatra'
 require 'sinatra/reloader'
 require 'redcarpet' # for markdown -> html rendering
+require 'fileutils' # for making new files
 
 configure do
   enable :sessions
@@ -30,6 +31,49 @@ end
 get '/' do
   @files = files.map { |file_path| File.basename(file_path) }
   erb :index
+end
+
+# Form to add a new document
+get '/new' do
+  erb :new_file
+end
+
+def filename_error(filename)
+  # path = full_path(filename)
+  extension = File.extname(filename)
+
+  if filename.empty?
+    "Filename must not be empty."
+  elsif filename.size > 20
+    "Filename must be 20 characters or less."
+  elsif extension.empty?
+    "File must have a valid extension type."
+  elsif filename.size <= extension.size
+    "File must have a name."
+  elsif files.include?(filename)
+    "File already exists with that name."
+  end
+end
+
+def create_document(name, content = "")
+  File.open(File.join(data_path, name), "w") do |file|
+    file.write(content)
+  end
+end
+
+post '/new' do
+  @filename = params[:filename].strip
+  error = filename_error(@filename)
+  
+  if error
+    session[:error] = error
+    status 422
+    erb :new_file
+  else
+    create_document(@filename)
+    session[:success] = "#{@filename} was created."
+    redirect '/'
+  end
 end
 
 def redirect_invalid_file(file)
@@ -98,14 +142,25 @@ post '/:filename/edit' do
   end  
 end
 
-=begin
-- messages should have yellow bg
-- messages disappear on reload (done?)
-- text files still plain text
-- full site (md, but not txt) use sans-serif typeface
+post '/:filename/delete' do
+  @filename = params[:filename]
 
-css file
-- new layout to put everything in body ??
-- body? use sans-serif
-- class flash success/error background yellow
+  file_path = full_path(@filename)
+  redirect_invalid_file(file_path)
+
+  File.delete(file_path)
+
+  session[:success] = "#{@filename} has been deleted."
+  redirect '/'
+end
+
+
+
+=begin
+- delete button next to each doc in the index page
+  - form to post filename/delete
+- post filename/delete
+  - if valid filename
+  - delete file???
+  - success message, redirect /
 =end
