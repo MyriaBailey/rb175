@@ -2,6 +2,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     base64 (0.3.0)
+    bcrypt (3.1.20)
     logger (1.7.0)
     minitest (5.25.5)
     multi_json (1.17.0)
@@ -44,6 +45,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  bcrypt
   minitest
   puma
   rack-test

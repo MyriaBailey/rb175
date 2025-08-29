@@ -2,6 +2,8 @@ require 'sinatra'
 require 'sinatra/reloader'
 require 'redcarpet' # for markdown -> html rendering
 require 'fileutils' # for making new files
+require 'yaml' # for reading yaml files? wow
+require 'bcrypt' # for password hashing
 
 configure do
   enable :sessions
@@ -27,14 +29,71 @@ def full_path(filename)
   File.join(data_path, filename)
 end
 
+def user_credentials
+  credentials_path = if ENV["RACK_ENV"] == "test"
+    File.expand_path("../test/users.yml", __FILE__)
+  else
+    File.expand_path("../users.yml", __FILE__)
+  end
+
+  YAML.load_file(credentials_path)
+end
+
 # Homepage
 get '/' do
   @files = files.map { |file_path| File.basename(file_path) }
+  @username = session[:username]
   erb :index
+end
+
+# Signin Page
+get '/users/signin' do
+  erb :signin
+end
+
+def valid_credentials?(username, password)
+  credentials = user_credentials
+  return false unless credentials[username] && password
+  
+  bcrypt_password = BCrypt::Password.new(credentials[username])
+  bcrypt_password == password
+end
+
+def signed_in?
+  !!session[:username]
+end
+
+def redirect_signed_out_users
+  return if signed_in?
+  session[:error] = "You must be signed in to do that."
+  redirect '/'
+end
+
+post '/users/signin' do
+  @username = params[:username]
+  password = params[:password]
+
+  if valid_credentials?(@username, password)
+    session[:username] = @username
+    session[:success] = "Welcome!"
+    redirect '/'
+  else
+    session[:error] = "Invalid credentials"
+    status 422
+    erb :signin
+  end
+end
+
+# Signout Page
+post '/users/signout' do
+  session.delete(:username)
+  session[:success] = "You have been signed out."
+  redirect '/'
 end
 
 # Form to add a new document
 get '/new' do
+  redirect_signed_out_users
   erb :new_file
 end
 
@@ -61,8 +120,14 @@ def create_document(name, content = "")
   end
 end
 
+def sanitize_filename(filename)
+  File.basename(filename.strip)
+end
+
+# Create new file from filename
 post '/new' do
-  @filename = params[:filename].strip
+  redirect_signed_out_users
+  @filename = sanitize_filename(params[:filename])
   error = filename_error(@filename)
   
   if error
@@ -105,7 +170,8 @@ end
 
 # View File
 get '/:filename' do
-  file = full_path(params[:filename])
+  filename = sanitize_filename(params[:filename])
+  file = full_path(filename)
 
   redirect_invalid_file(file)
   load_file(file)
@@ -113,7 +179,8 @@ end
 
 # Form page to edit a file
 get '/:filename/edit' do
-  @filename = params[:filename]
+  redirect_signed_out_users
+  @filename = sanitize_filename(params[:filename])
 
   file = full_path(@filename)
   redirect_invalid_file(file)
@@ -124,7 +191,8 @@ end
 
 # Post request to submit file edits
 post '/:filename/edit' do
-  @filename = params[:filename]
+  redirect_signed_out_users
+  @filename = sanitize_filename(params[:filename])
 
   file_path = full_path(@filename)
   redirect_invalid_file(file_path) # optional?
@@ -143,7 +211,8 @@ post '/:filename/edit' do
 end
 
 post '/:filename/delete' do
-  @filename = params[:filename]
+  redirect_signed_out_users
+  @filename = sanitize_filename(params[:filename])
 
   file_path = full_path(@filename)
   redirect_invalid_file(file_path)
@@ -157,10 +226,7 @@ end
 
 
 =begin
-- delete button next to each doc in the index page
-  - form to post filename/delete
-- post filename/delete
-  - if valid filename
-  - delete file???
-  - success message, redirect /
+create file "credentials.yaml"
+update valid password method
+- does yaml hash of key username = value password?
 =end

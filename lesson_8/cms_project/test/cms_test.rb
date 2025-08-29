@@ -27,10 +27,17 @@ class AppTest < Minitest::Test
     end
   end
 
-  def test_get
+  def session
+    last_request.env["rack.session"]
+  end
+
+  def admin_session
+    { "rack.session" => {username: "admin" } }
+  end
+
+  def test_index
     create_document "about.md"
     create_document "changes.txt"
-    create_document "history.txt"
 
     get '/'
 
@@ -39,7 +46,6 @@ class AppTest < Minitest::Test
 
     assert_includes last_response.body, "about.md"
     assert_includes last_response.body, "changes.txt"
-    assert_includes last_response.body, "history.txt"
   end
 
   def test_viewing_txt_file
@@ -54,9 +60,7 @@ class AppTest < Minitest::Test
   end
 
   def test_viewing_markdown_file
-    md_content = "# Ruby is..."
-    create_document "about.md", md_content
-
+    create_document "about.md", "# Ruby is..."
     html_content = "<h1>Ruby is...</h1>"
 
     get '/about.md'
@@ -68,24 +72,15 @@ class AppTest < Minitest::Test
   def test_document_not_found
     get '/notrealdocument.txt'
     assert_equal 302, last_response.status
-
-    get last_response["Location"]
-    error_msg = "notrealdocument.txt does not exist."
-    assert_equal 200, last_response.status
-    assert_includes last_response.body, error_msg
-
-    get '/'
-    assert_equal 200, last_response.status
-    refute_includes last_response.body, error_msg
+    assert_equal "notrealdocument.txt does not exist.", session[:error]
   end
 
-  def test_edit_content
+  def test_view_edit_content_form
     content = "The Changes Text File"
     create_document "changes.txt", content
 
-    get '/changes.txt/edit'
+    get '/changes.txt/edit', {}, admin_session
     assert_equal 200, last_response.status
-    assert_equal "text/html;charset=utf-8", last_response["Content-Type"]
     assert_includes last_response.body, "Edit content of changes.txt:"
 
     # copied/pasted:
@@ -93,44 +88,69 @@ class AppTest < Minitest::Test
     assert_includes last_response.body, %q(<button type="submit")
   end
 
+  def test_view_edit_content_form_signed_out
+    create_document "changes.txt"
+
+    get "/changes.txt/edit"
+
+    assert_equal 302, last_response.status
+    assert_equal "You must be signed in to do that.", session[:error]
+  end
+
   def test_updating_content
     content = "The Changes Text File"
     create_document "changes.txt", content
 
-    post "/changes.txt/edit", new_content: "New test content."
+    post "/changes.txt/edit", { new_content: "New test content."}, admin_session
     assert_equal 302, last_response.status
-
-    get last_response["Location"]
-    assert_equal 200, last_response.status
-    assert_includes last_response.body, "changes.txt has been updated."
+    assert_equal "changes.txt has been updated.", session[:success]
 
     get '/changes.txt'
     assert_equal 200, last_response.status
     assert_includes last_response.body, "New test content."
   end
 
-  def test_view_new_file_form
-    get '/new'
-    assert_equal 200, last_response.status
-    assert_equal "text/html;charset=utf-8", last_response["Content-Type"]
+  def test_updating_content_signed_out
+    post "/changes.txt/edit", {content: "new content"}
 
+    assert_equal 302, last_response.status
+    assert_equal "You must be signed in to do that.", session[:error]
+  end
+
+  def test_view_new_file_form
+    get '/new', {}, admin_session
+
+    assert_equal 200, last_response.status
     assert_includes last_response.body, "Add a new document:"
     assert_includes last_response.body, %q(<input type="text")
     assert_includes last_response.body, %q(<button type="submit")
   end
 
-  def test_create_new_file
-    post '/new', filename: "new_file.txt"
+  def test_view_new_file_form_signed_out
+    get "/new"
+
     assert_equal 302, last_response.status
+    assert_equal "You must be signed in to do that.", session[:error]
+  end
+
+  def test_create_new_file
+    post '/new', { filename: "new_file.txt" }, admin_session
+    assert_equal 302, last_response.status
+    assert_equal "new_file.txt was created.", session[:success]
 
     get last_response["Location"]
-    assert_equal 200, last_response.status
-    assert_includes last_response.body, "new_file.txt was created."
     assert_includes last_response.body, %q(<a href="/new_file.txt">)
   end
 
+  def test_create_new_file_signed_out
+    post "/new", {filename: "test.txt"}
+
+    assert_equal 302, last_response.status
+    assert_equal "You must be signed in to do that.", session[:error]
+  end
+
   def test_create_invalid_file
-    post '/new', filename: ""
+    post '/new', { filename: "" }, admin_session
     assert_equal 422, last_response.status
     assert_includes last_response.body, "Filename must not be empty."
   end
@@ -147,11 +167,63 @@ class AppTest < Minitest::Test
   def test_delete_file
     create_document("test.txt")
 
-    post '/test.txt/delete'
+    post '/test.txt/delete', {}, admin_session
     assert_equal 302, last_response.status
+    assert_equal "test.txt has been deleted.", session[:success]
 
     get last_response["Location"]
-    assert_includes last_response.body, "test.txt has been deleted."
     refute_includes last_response.body, %q(<a href="/test.txt">)
+  end
+
+  def test_deleting_document_signed_out
+    create_document("test.txt")
+
+    post "/test.txt/delete"
+    assert_equal 302, last_response.status
+    assert_equal "You must be signed in to do that.", session[:error]
+  end
+
+  def test_sign_in_form
+    get '/users/signin'
+    assert_equal 200, last_response.status
+    assert_includes last_response.body, "Username:"
+    assert_includes last_response.body, "Sign In"
+  end
+
+  def test_signing_in
+    post '/users/signin', username: 'admin', password: 'secret'
+    assert_equal 302, last_response.status
+    assert_equal "Welcome!", session[:success]
+    assert_equal "admin", session[:username]
+
+    get last_response["Location"]
+    assert_includes last_response.body, "Signed in as admin."
+    assert_includes last_response.body, "Sign Out"
+  end
+
+  def test_signin_with_bad_credentials
+    post '/users/signin', username: 'fake', password: 'invalid'
+    assert_equal 422, last_response.status
+    assert_nil session[:username]
+    assert_includes last_response.body, "Invalid credentials"
+  end
+
+  def test_signed_out
+    get '/'
+    assert_equal 200, last_response.status
+    assert_includes last_response.body, "Sign In"
+  end
+
+  def test_signing_out
+    get '/', {}, { "rack.session" => { username: "admin" } }
+    assert_includes last_response.body, "Signed in as admin."
+
+    post '/users/signout'
+    assert_equal 302, last_response.status
+    assert_equal "You have been signed out.", session[:success]
+    
+    get last_response["Location"]
+    assert_nil session[:username]
+    assert_includes last_response.body, "Sign In"
   end
 end
